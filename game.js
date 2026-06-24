@@ -4,12 +4,9 @@ const ctx = canvas.getContext('2d');
 
 // Constants
 const GRID_SIZE = 20;
-const TILE_COUNT = canvas.width / GRID_SIZE;
+let TILE_COUNT = 20; // will be recalculated on resize
 const INITIAL_FRUIT_COUNT = 4;
-const AI_STARTS = [
-    { x: 4, y: 4, dir: { x: 1, y: 0 }, color: '#f97316', name: 'AI-1' },
-    { x: TILE_COUNT - 5, y: TILE_COUNT - 5, dir: { x: -1, y: 0 }, color: '#38bdf8', name: 'AI-2' }
-];
+let AI_STARTS = [];
 
 // Game State
 let score = 0;
@@ -50,9 +47,33 @@ snakeColorInput.addEventListener('input', () => {
 });
 document.addEventListener('keydown', handleKeyPress);
 
+// Responsive canvas setup
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const parentWidth = canvas.parentElement.clientWidth;
+    // Keep canvas square and fit within parent with some padding
+    const size = Math.min(parentWidth - 40, 600);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    canvas.width = Math.floor(size * dpr);
+    canvas.height = Math.floor(size * dpr);
+    // Reset transform so we draw in logical pixels
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    TILE_COUNT = Math.max(8, Math.floor(size / GRID_SIZE));
+}
+
+window.addEventListener('resize', () => {
+    const prev = TILE_COUNT;
+    resizeCanvas();
+    // If grid size changed, reinitialize positions so AIs spawn correctly
+    if (TILE_COUNT !== prev) initializeGame(true);
+});
+
+resizeCanvas();
+
 initializeGame();
 
-function initializeGame() {
+function initializeGame(reinit = false) {
     score = 0;
     gameSpeed = 120;
     gameRunning = false;
@@ -60,14 +81,13 @@ function initializeGame() {
     snakes = [];
     fruits = [];
 
-    snakes.push(createSnake(
-        Math.floor(TILE_COUNT / 2),
-        Math.floor(TILE_COUNT / 2),
-        { x: 1, y: 0 },
-        snakeColor,
-        'Player',
-        true
-    ));
+    // Ensure AI start positions are based on current TILE_COUNT
+    AI_STARTS = [
+        { x: 4, y: 4, dir: { x: 1, y: 0 }, color: '#f97316', name: 'AI-1' },
+        { x: Math.max(6, TILE_COUNT - 5), y: Math.max(6, TILE_COUNT - 5), dir: { x: -1, y: 0 }, color: '#38bdf8', name: 'AI-2' }
+    ];
+
+    snakes.push(createSnake(Math.floor(TILE_COUNT / 2), Math.floor(TILE_COUNT / 2), { x: 1, y: 0 }, snakeColor, 'Player', true));
 
     AI_STARTS.forEach((start) => {
         snakes.push(createSnake(start.x, start.y, start.dir, start.color, start.name, false));
@@ -165,6 +185,53 @@ function handleKeyPress(e) {
         }
     }
 }
+
+// Touch / swipe support
+const touchControls = document.getElementById('touchControls');
+const touchButtons = document.querySelectorAll('.touch-btn');
+let touchStartX = null;
+let touchStartY = null;
+
+touchButtons.forEach((btn) => {
+    const parts = btn.dataset.dir.split(',');
+    const dir = { x: Number(parts[0]), y: Number(parts[1]) };
+    const applyDir = () => {
+        const player = getPlayerSnake();
+        if (!player || !player.alive) return;
+        if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) {
+            player.nextDirection = dir;
+        }
+    };
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); applyDir(); }, { passive: false });
+    btn.addEventListener('mousedown', (e) => { e.preventDefault(); applyDir(); });
+});
+
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches && e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }
+}, { passive: true });
+
+canvas.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const threshold = 30; // px
+    if (Math.max(absX, absY) > threshold) {
+        let dir;
+        if (absX > absY) dir = { x: dx > 0 ? 1 : -1, y: 0 };
+        else dir = { x: 0, y: dy > 0 ? 1 : -1 };
+        const player = getPlayerSnake();
+        if (player && player.alive) {
+            if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) player.nextDirection = dir;
+        }
+    }
+    touchStartX = null; touchStartY = null;
+}, false);
 
 function gameLoop() {
     if (!gameRunning || gamePaused) return;
