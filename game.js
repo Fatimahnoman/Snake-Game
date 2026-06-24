@@ -207,11 +207,31 @@ touchButtons.forEach((btn) => {
 });
 
 canvas.addEventListener('touchstart', (e) => {
-    if (e.touches && e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
+    if (!(e.touches && e.touches.length === 1)) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+
+    // Immediate tap-to-direction based on canvas center
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = touch.clientX - cx;
+    const dy = touch.clientY - cy;
+    let dir;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        dir = { x: dx > 0 ? 1 : -1, y: 0 };
+    } else {
+        dir = { x: 0, y: dy > 0 ? 1 : -1 };
     }
-}, { passive: true });
+    const player = getPlayerSnake();
+    if (player && player.alive) {
+        if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) {
+            player.nextDirection = dir;
+        }
+    }
+}, { passive: false });
 
 canvas.addEventListener('touchend', (e) => {
     if (touchStartX === null) return;

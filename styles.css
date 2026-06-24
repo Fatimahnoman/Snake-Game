@@ -264,7 +264,8 @@ h1 {
 }
 
 @media (max-width: 640px) {
-    .touch-controls { display: flex; }
+    /* Hide the on-screen arrow buttons; tapping the canvas controls movement */
+    .touch-controls { display: none; }
     .container { padding-bottom: 24px; }
     #gameCanvas { width: 100%; height: auto; }
 }
