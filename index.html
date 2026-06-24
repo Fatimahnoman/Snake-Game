@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐍 Snake Game</h1>
+            <div class="stats">
+                <div class="stat">
+                    <span class="label">Score:</span>
+                    <span class="value" id="score">0</span>
+                </div>
+                <div class="stat">
+                    <span class="label">High Score:</span>
+                    <span class="value" id="highScore">0</span>
+                </div>
+            </div>
+            <div class="battle-info">
+                <div class="battle-stat">
+                    <span class="label">Enemies Alive:</span>
+                    <span class="value" id="enemyCount">0</span>
+                </div>
+                <div id="enemyList" class="enemy-list"></div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+        <div class="controls">
+            <div class="color-control">
+                <label for="snakeColor">Snake Color:</label>
+                <input type="color" id="snakeColor" value="#22c55e">
+            </div>
+            <button id="startBtn" class="btn btn-primary">Start Game</button>
+            <button id="pauseBtn" class="btn btn-secondary" disabled>Pause</button>
+            <button id="resetBtn" class="btn btn-secondary">Reset</button>
+        </div>
+
+        <div class="instructions">
+            <h3>How to Play:</h3>
+            <ul>
+                <li><strong>Arrow Keys</strong> or <strong>WASD</strong> to move the snake</li>
+                <li>Eat the red fruit 🍎 to grow and gain points</li>
+                <li>Compete against computer snakes — enemies can also eat fruit</li>
+                <li>When a snake dies, its body turns into fruit for the others</li>
+                <li>Press <strong>R</strong> to reset and start a new battle</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
