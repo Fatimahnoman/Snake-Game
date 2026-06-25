@@ -16,6 +16,14 @@ let gamePaused = false;
 let gameSpeed = 120;
 let snakes = [];
 let fruits = [];
+let level = 1;
+const LEVELS = [
+    { id: 1, speed: 160, threshold: 0 },
+    { id: 2, speed: 130, threshold: 50 },
+    { id: 3, speed: 100, threshold: 120 },
+    { id: 4, speed: 80, threshold: 220 },
+    { id: 5, speed: 60, threshold: 350 }
+];
 
 // DOM Elements
 const scoreDisplay = document.getElementById('score');
@@ -29,6 +37,8 @@ const snakeColorInput = document.getElementById('snakeColor');
 
 let snakeColor = snakeColorInput.value;
 let snakeHeadColor = lightenColor(snakeColor, 24);
+
+const levelDisplay = document.getElementById('level');
 
 highScoreDisplay.textContent = highScore;
 scoreDisplay.textContent = score;
@@ -76,6 +86,7 @@ initializeGame();
 function initializeGame(reinit = false) {
     score = 0;
     gameSpeed = 120;
+    level = 1;
     gameRunning = false;
     gamePaused = false;
     snakes = [];
@@ -99,6 +110,7 @@ function initializeGame(reinit = false) {
 
     scoreDisplay.textContent = score;
     highScoreDisplay.textContent = highScore;
+    levelDisplay.textContent = level;
     updateEnemyInfo();
     draw();
 }
@@ -311,6 +323,16 @@ function processFruits() {
     });
 
     gameSpeed = Math.max(60, 120 - Math.floor(score / 5));
+    updateLevelByScore();
+}
+
+function updateLevelByScore() {
+    const next = [...LEVELS].reverse().find(l => score >= l.threshold) || LEVELS[0];
+    if (next.id !== level) {
+        level = next.id;
+        gameSpeed = next.speed;
+        levelDisplay.textContent = level;
+    }
 }
 
 function resolveCollisions() {
