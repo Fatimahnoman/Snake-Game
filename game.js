@@ -6,17 +6,6 @@ const ctx = canvas.getContext('2d');
 const GRID_SIZE = 20;
 let TILE_COUNT = 20; // will be recalculated on resize
 const INITIAL_FRUIT_COUNT = 4;
-let AI_STARTS = [];
-
-// Game State
-let score = 0;
-let highScore = Number(localStorage.getItem('snakeHighScore') || 0);
-let gameRunning = false;
-let gamePaused = false;
-let gameSpeed = 120;
-let snakes = [];
-let fruits = [];
-let level = 1;
 const LEVELS = [
     { id: 1, speed: 160, threshold: 0 },
     { id: 2, speed: 130, threshold: 50 },
@@ -25,11 +14,22 @@ const LEVELS = [
     { id: 5, speed: 60, threshold: 350 }
 ];
 
+// Game State
+let score = 0;
+let highScore = Number(localStorage.getItem('snakeHighScore') || 0);
+let level = 1;
+let gameRunning = false;
+let gamePaused = false;
+let gameSpeed = LEVELS[0].speed;
+let snake = [];
+let direction = { x: 1, y: 0 };
+let nextDirection = { x: 1, y: 0 };
+let fruits = [];
+
 // DOM Elements
 const scoreDisplay = document.getElementById('score');
 const highScoreDisplay = document.getElementById('highScore');
-const enemyCountDisplay = document.getElementById('enemyCount');
-const enemyList = document.getElementById('enemyList');
+const levelDisplay = document.getElementById('level');
 const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const resetBtn = document.getElementById('resetBtn');
@@ -38,10 +38,9 @@ const snakeColorInput = document.getElementById('snakeColor');
 let snakeColor = snakeColorInput.value;
 let snakeHeadColor = lightenColor(snakeColor, 24);
 
-const levelDisplay = document.getElementById('level');
-
-highScoreDisplay.textContent = highScore;
 scoreDisplay.textContent = score;
+highScoreDisplay.textContent = highScore;
+levelDisplay.textContent = level;
 
 startBtn.addEventListener('click', startGame);
 pauseBtn.addEventListener('click', togglePause);
@@ -49,60 +48,47 @@ resetBtn.addEventListener('click', resetGame);
 snakeColorInput.addEventListener('input', () => {
     snakeColor = snakeColorInput.value;
     snakeHeadColor = lightenColor(snakeColor, 24);
-    const playerSnake = getPlayerSnake();
-    if (playerSnake) {
-        playerSnake.color = snakeColor;
-        playerSnake.headColor = snakeHeadColor;
-    }
 });
 document.addEventListener('keydown', handleKeyPress);
 
 // Responsive canvas setup
 function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
     const parentWidth = canvas.parentElement.clientWidth;
-    // Keep canvas square and fit within parent with some padding
     const size = Math.min(parentWidth - 40, 600);
     canvas.style.width = size + 'px';
     canvas.style.height = size + 'px';
-    canvas.width = Math.floor(size * dpr);
-    canvas.height = Math.floor(size * dpr);
-    // Reset transform so we draw in logical pixels
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas.width = size;
+    canvas.height = size;
     TILE_COUNT = Math.max(8, Math.floor(size / GRID_SIZE));
 }
 
 window.addEventListener('resize', () => {
     const prev = TILE_COUNT;
     resizeCanvas();
-    // If grid size changed, reinitialize positions so AIs spawn correctly
     if (TILE_COUNT !== prev) initializeGame(true);
 });
 
 resizeCanvas();
-
 initializeGame();
 
 function initializeGame(reinit = false) {
     score = 0;
-    gameSpeed = 120;
     level = 1;
+    gameSpeed = LEVELS[0].speed;
     gameRunning = false;
     gamePaused = false;
-    snakes = [];
+    snake = [];
+    direction = { x: 1, y: 0 };
+    nextDirection = { x: 1, y: 0 };
     fruits = [];
 
-    // Ensure AI start positions are based on current TILE_COUNT
-    AI_STARTS = [
-        { x: 4, y: 4, dir: { x: 1, y: 0 }, color: '#f97316', name: 'AI-1' },
-        { x: Math.max(6, TILE_COUNT - 5), y: Math.max(6, TILE_COUNT - 5), dir: { x: -1, y: 0 }, color: '#38bdf8', name: 'AI-2' }
+    const startX = Math.floor(TILE_COUNT / 2);
+    const startY = Math.floor(TILE_COUNT / 2);
+    snake = [
+        { x: startX, y: startY },
+        { x: startX - 1, y: startY },
+        { x: startX - 2, y: startY }
     ];
-
-    snakes.push(createSnake(Math.floor(TILE_COUNT / 2), Math.floor(TILE_COUNT / 2), { x: 1, y: 0 }, snakeColor, 'Player', true));
-
-    AI_STARTS.forEach((start) => {
-        snakes.push(createSnake(start.x, start.y, start.dir, start.color, start.name, false));
-    });
 
     for (let i = 0; i < INITIAL_FRUIT_COUNT; i += 1) {
         fruits.push(generateFruit());
@@ -111,31 +97,7 @@ function initializeGame(reinit = false) {
     scoreDisplay.textContent = score;
     highScoreDisplay.textContent = highScore;
     levelDisplay.textContent = level;
-    updateEnemyInfo();
     draw();
-}
-
-function createSnake(x, y, direction, color, name, isPlayer) {
-    const body = [{ x, y }];
-    for (let i = 1; i < 3; i += 1) {
-        body.push({ x: x - direction.x * i, y: y - direction.y * i });
-    }
-
-    return {
-        id: name,
-        body,
-        direction: { ...direction },
-        nextDirection: { ...direction },
-        color,
-        headColor: lightenColor(color, 24),
-        alive: true,
-        isPlayer,
-        name
-    };
-}
-
-function getPlayerSnake() {
-    return snakes.find((snake) => snake.isPlayer);
 }
 
 function startGame() {
@@ -186,37 +148,17 @@ function handleKeyPress(e) {
         d: { x: 1, y: 0 }
     };
 
-    const playerSnake = getPlayerSnake();
-    if (!playerSnake || !playerSnake.alive) return;
-
     if (arrows[key]) {
         e.preventDefault();
         const desired = arrows[key];
-        if (!(playerSnake.direction.x === -desired.x && playerSnake.direction.y === -desired.y)) {
-            playerSnake.nextDirection = desired;
+        if (!(direction.x === -desired.x && direction.y === -desired.y)) {
+            nextDirection = desired;
         }
     }
 }
 
-// Touch / swipe support
-const touchControls = document.getElementById('touchControls');
-const touchButtons = document.querySelectorAll('.touch-btn');
 let touchStartX = null;
 let touchStartY = null;
-
-touchButtons.forEach((btn) => {
-    const parts = btn.dataset.dir.split(',');
-    const dir = { x: Number(parts[0]), y: Number(parts[1]) };
-    const applyDir = () => {
-        const player = getPlayerSnake();
-        if (!player || !player.alive) return;
-        if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) {
-            player.nextDirection = dir;
-        }
-    };
-    btn.addEventListener('touchstart', (e) => { e.preventDefault(); applyDir(); }, { passive: false });
-    btn.addEventListener('mousedown', (e) => { e.preventDefault(); applyDir(); });
-});
 
 canvas.addEventListener('touchstart', (e) => {
     if (!(e.touches && e.touches.length === 1)) return;
@@ -225,7 +167,6 @@ canvas.addEventListener('touchstart', (e) => {
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
 
-    // Immediate tap-to-direction based on canvas center
     const rect = canvas.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -237,11 +178,8 @@ canvas.addEventListener('touchstart', (e) => {
     } else {
         dir = { x: 0, y: dy > 0 ? 1 : -1 };
     }
-    const player = getPlayerSnake();
-    if (player && player.alive) {
-        if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) {
-            player.nextDirection = dir;
-        }
+    if (!(direction.x === -dir.x && direction.y === -dir.y)) {
+        nextDirection = dir;
     }
 }, { passive: false });
 
@@ -252,78 +190,54 @@ canvas.addEventListener('touchend', (e) => {
     const dy = touch.clientY - touchStartY;
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
-    const threshold = 30; // px
+    const threshold = 30;
     if (Math.max(absX, absY) > threshold) {
         let dir;
         if (absX > absY) dir = { x: dx > 0 ? 1 : -1, y: 0 };
         else dir = { x: 0, y: dy > 0 ? 1 : -1 };
-        const player = getPlayerSnake();
-        if (player && player.alive) {
-            if (!(player.direction.x === -dir.x && player.direction.y === -dir.y)) player.nextDirection = dir;
+        if (!(direction.x === -dir.x && direction.y === -dir.y)) {
+            nextDirection = dir;
         }
     }
-    touchStartX = null; touchStartY = null;
+    touchStartX = null;
+    touchStartY = null;
 }, false);
 
 function gameLoop() {
     if (!gameRunning || gamePaused) return;
 
-    moveSnakes();
-    processFruits();
-    resolveCollisions();
-    updateEnemyInfo();
-    draw();
+    direction = { ...nextDirection };
+    const head = {
+        x: snake[0].x + direction.x,
+        y: snake[0].y + direction.y
+    };
 
-    if (gameRunning) {
-        setTimeout(gameLoop, gameSpeed);
+    if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
+        endGame('You hit the wall!');
+        return;
     }
-}
 
-function moveSnakes() {
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
+    if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+        endGame('You hit yourself!');
+        return;
+    }
 
-        if (!snake.isPlayer) {
-            const nextDir = chooseAiDirection(snake);
-            if (nextDir) {
-                snake.nextDirection = nextDir;
-            }
-        }
+    snake.unshift(head);
+    const fruitIndex = fruits.findIndex((fruit) => fruit.x === head.x && fruit.y === head.y);
+    const ateFruit = fruitIndex > -1;
 
-        snake.direction = { ...snake.nextDirection };
-        const nextHead = {
-            x: snake.body[0].x + snake.direction.x,
-            y: snake.body[0].y + snake.direction.y
-        };
-        snake.body.unshift(nextHead);
-        snake.grew = false;
-    });
-}
+    if (ateFruit) {
+        fruits.splice(fruitIndex, 1);
+        score += 10;
+        scoreDisplay.textContent = score;
+        spawnFruit();
+    } else {
+        snake.pop();
+    }
 
-function processFruits() {
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
-
-        const head = snake.body[0];
-        const fruitIndex = fruits.findIndex((fruit) => fruit.x === head.x && fruit.y === head.y);
-
-        if (fruitIndex > -1) {
-            fruits.splice(fruitIndex, 1);
-            snake.grew = true;
-            if (snake.isPlayer) {
-                score += 10;
-                scoreDisplay.textContent = score;
-            }
-            spawnFruit();
-        }
-
-        if (!snake.grew) {
-            snake.body.pop();
-        }
-    });
-
-    gameSpeed = Math.max(60, 120 - Math.floor(score / 5));
     updateLevelByScore();
+    draw();
+    setTimeout(gameLoop, gameSpeed);
 }
 
 function updateLevelByScore() {
@@ -335,158 +249,9 @@ function updateLevelByScore() {
     }
 }
 
-function resolveCollisions() {
-    const positionCounts = new Map();
-    const headCounts = new Map();
-
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
-        snake.body.forEach((segment) => {
-            const key = `${segment.x},${segment.y}`;
-            positionCounts.set(key, (positionCounts.get(key) || 0) + 1);
-        });
-        const headKey = `${snake.body[0].x},${snake.body[0].y}`;
-        headCounts.set(headKey, (headCounts.get(headKey) || 0) + 1);
-    });
-
-    const toDie = [];
-
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
-        const head = snake.body[0];
-        const headKey = `${head.x},${head.y}`;
-
-        if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
-            toDie.push(snake);
-            return;
-        }
-
-        if (positionCounts.get(headKey) > 1 || headCounts.get(headKey) > 1) {
-            toDie.push(snake);
-        }
-    });
-
-    toDie.forEach((snake) => killSnake(snake));
-}
-
-function killSnake(snake) {
-    if (!snake.alive) return;
-    snake.alive = false;
-    convertSnakeBodyToFruit(snake.body);
-
-    if (snake.isPlayer) {
-        endGame('You were defeated in battle.');
-    }
-}
-
-function convertSnakeBodyToFruit(body) {
-    const occupied = getOccupiedSet();
-
-    body.forEach((segment) => {
-        const key = `${segment.x},${segment.y}`;
-        if (occupied.has(key) || fruits.some((fruit) => fruit.x === segment.x && fruit.y === segment.y)) {
-            return;
-        }
-        fruits.push({ x: segment.x, y: segment.y });
-    });
-}
-
-function getOccupiedSet() {
-    const occupied = new Set();
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
-        snake.body.forEach((segment) => {
-            occupied.add(`${segment.x},${segment.y}`);
-        });
-    });
-    return occupied;
-}
-
-function chooseAiDirection(snake) {
-    const options = [
-        snake.direction,
-        ...getTurnOptions(snake.direction)
-    ];
-
-    const safeOptions = options.filter((direction) => !wouldCollide(snake, direction));
-    if (safeOptions.length === 0) {
-        return null;
-    }
-
-    const target = findClosestFruit(snake.body[0]);
-    if (target) {
-        const chasing = safeOptions.filter((direction) => {
-            const next = {
-                x: snake.body[0].x + direction.x,
-                y: snake.body[0].y + direction.y
-            };
-            return distance(next, target) < distance(snake.body[0], target);
-        });
-
-        if (chasing.length) {
-            return randomChoice(chasing);
-        }
-    }
-
-    return randomChoice(safeOptions);
-}
-
-function getTurnOptions(direction) {
-    if (direction.x !== 0) {
-        return [
-            { x: 0, y: -1 },
-            { x: 0, y: 1 }
-        ];
-    }
-
-    return [
-        { x: -1, y: 0 },
-        { x: 1, y: 0 }
-    ];
-}
-
-function wouldCollide(snake, direction) {
-    const nextX = snake.body[0].x + direction.x;
-    const nextY = snake.body[0].y + direction.y;
-
-    if (nextX < 0 || nextX >= TILE_COUNT || nextY < 0 || nextY >= TILE_COUNT) {
-        return true;
-    }
-
-    const occupied = getOccupiedSet();
-    const tail = snake.body[snake.body.length - 1];
-    const tailKey = `${tail.x},${tail.y}`;
-    const nextKey = `${nextX},${nextY}`;
-
-    if (!snake.grew) {
-        occupied.delete(tailKey);
-    }
-
-    return occupied.has(nextKey);
-}
-
-function findClosestFruit(position) {
-    if (fruits.length === 0) return null;
-    return fruits.reduce((closest, fruit) => {
-        return distance(position, fruit) < distance(position, closest) ? fruit : closest;
-    }, fruits[0]);
-}
-
-function distance(a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-}
-
-function randomChoice(array) {
-    return array[Math.floor(Math.random() * array.length)];
-}
-
-function spawnFruit() {
-    fruits.push(generateFruit());
-}
-
 function generateFruit() {
     let newFruit;
-    const occupied = getOccupiedSet();
+    const occupied = new Set(snake.map(segment => `${segment.x},${segment.y}`));
     const existingFruit = new Set(fruits.map((fruit) => `${fruit.x},${fruit.y}`));
 
     do {
@@ -499,17 +264,8 @@ function generateFruit() {
     return newFruit;
 }
 
-function updateEnemyInfo() {
-    const enemies = snakes.filter((snake) => !snake.isPlayer);
-    const alive = enemies.filter((snake) => snake.alive).length;
-
-    enemyCountDisplay.textContent = alive;
-    enemyList.innerHTML = enemies
-        .map(
-            (snake) =>
-                `<div class="enemy-item"><span class="enemy-color" style="background:${snake.color}"></span>${snake.name}: ${snake.alive ? 'Alive' : 'Dead'}</div>`
-        )
-        .join('');
+function spawnFruit() {
+    fruits.push(generateFruit());
 }
 
 function draw() {
@@ -546,26 +302,22 @@ function draw() {
         ctx.shadowColor = 'transparent';
     });
 
-    snakes.forEach((snake) => {
-        if (!snake.alive) return;
+    snake.forEach((segment, index) => {
+        if (index === 0) {
+            ctx.fillStyle = snakeHeadColor;
+            ctx.shadowColor = snakeHeadColor;
+            ctx.shadowBlur = 10;
+        } else {
+            ctx.fillStyle = snakeColor;
+            ctx.shadowColor = 'transparent';
+        }
 
-        snake.body.forEach((segment, index) => {
-            if (index === 0) {
-                ctx.fillStyle = snake.headColor;
-                ctx.shadowColor = snake.headColor;
-                ctx.shadowBlur = 10;
-            } else {
-                ctx.fillStyle = snake.color;
-                ctx.shadowColor = 'transparent';
-            }
-
-            ctx.fillRect(
-                segment.x * GRID_SIZE + 1,
-                segment.y * GRID_SIZE + 1,
-                GRID_SIZE - 2,
-                GRID_SIZE - 2
-            );
-        });
+        ctx.fillRect(
+            segment.x * GRID_SIZE + 1,
+            segment.y * GRID_SIZE + 1,
+            GRID_SIZE - 2,
+            GRID_SIZE - 2
+        );
     });
 
     if (gamePaused) {
